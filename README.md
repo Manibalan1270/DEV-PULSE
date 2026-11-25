@@ -98,3 +98,21 @@ Frontend URL: `http://localhost:3000`
 Contributions are always welcome. Please follow standard pull request workflows to submit code changes.
 
 *(Note: Add your specific license details here depending on your project's privacy)*
+
+---
+
+## 🔐 Accounts and security
+
+- **Create the first users** with `python seed_users.py` (in `backend/`). It makes a test organisation and three demo logins. The passwords are in that file and are for **local development only**.
+- **Adding people:** `POST /auth/register` now requires a signed-in **manager** (can add developers) or **CEO** (can add anyone). New users always join the creator's organisation. Before this, anyone could register themselves as CEO of any organisation.
+- **Live scores WebSocket:** connect with `ws://localhost:8000/ws/<org_id>?token=<access token>`. Only managers and CEOs of that organisation are let in.
+- Access tokens and refresh tokens are now different types, so a refresh token can't be used to call the API.
+- Copy `backend/.env.example` to `backend/.env` and `frontend/.env.example` to `frontend/.env.local`.
+
+## ✅ Tests
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+pytest
+```

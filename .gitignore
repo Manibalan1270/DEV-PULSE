@@ -14,6 +14,7 @@ out/
 # Environment & local secrets
 .env
 .env.*
+!.env.example
 .ENV
 
 # Logs and local tunnel output

@@ -1,10 +1,11 @@
 fastapi
-uvicorn
+uvicorn[standard]  # [standard] includes WebSocket support
 python-dotenv
-sqlalchemy
+sqlalchemy[asyncio]  # [asyncio] installs greenlet, required by the async engine
 asyncpg
 celery
 redis
+cryptography
 requests
 python-jose[cryptography]
 passlib[bcrypt]
