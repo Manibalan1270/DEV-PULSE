@@ -1,0 +1,5 @@
+-r requirements.txt
+pytest>=8
+httpx>=0.27
+# TestClient in newer FastAPI releases needs a different HTTP package; this version is known to work with httpx.
+fastapi==0.115.6

@@ -42,10 +42,11 @@ class RegisterRequest(BaseModel):
     model_config = ConfigDict(json_schema_extra={"example": {"email": "user@example.com"}})
     
     email: str  # Use plain str to allow .test domains in development
-    password: str = Field(min_length=6)
+    password: str = Field(min_length=8, max_length=72)  # bcrypt only uses the first 72 bytes
     display_name: Optional[str] = None
     role: str
-    org_id: str
+    # Ignored: new users always join the organisation of the manager/CEO creating them.
+    org_id: Optional[str] = None
     github_username: Optional[str] = None
 
 
@@ -156,19 +157,32 @@ async def _org_github_repo(db: AsyncSession, org_id: uuid.UUID) -> Optional[str]
     return None
 
 
+# Which roles each role may create. Registration used to be open to anyone,
+# with the role and organisation chosen by the caller - so anyone could make
+# themselves the CEO of any organisation. Now only a signed-in manager or CEO
+# can add people, only to their own organisation. Use seed_users.py to create
+# the first CEO.
+_CAN_CREATE = {"manager": {"developer"}, "ceo": {"developer", "manager", "ceo"}}
+
+
 @router.post("/auth/register")
-async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
+async def register(
+    payload: RegisterRequest,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
     role = payload.role.strip().lower()
     if role not in _ALLOWED_ROLES:
         raise HTTPException(status_code=400, detail="invalid role")
+    if role not in _CAN_CREATE.get(str(current_user.role), set()):
+        raise HTTPException(status_code=403, detail=f"a {current_user.role} cannot create a {role}")
 
     existing = await db.scalar(select(User).where(User.email == payload.email))
     if existing is not None:
         raise HTTPException(status_code=409, detail="email already exists")
 
-    org_uuid = _to_uuid(payload.org_id, "org_id")
     user = User(
-        org_id=org_uuid,
+        org_id=current_user.org_id,
         email=payload.email,
         hashed_password=hash_password(payload.password),
         role=role,
@@ -228,7 +242,7 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)) -> Di
 
 @router.post("/auth/refresh")
 async def refresh_tokens(payload: RefreshRequest, db: AsyncSession = Depends(get_db)) -> Dict[str, str]:
-    token_payload = verify_token(payload.refresh_token)
+    token_payload = verify_token(payload.refresh_token, expected_type="refresh")
     user_id = _to_uuid(str(token_payload.get("sub", "")), "token sub")
 
     token_row = await _find_active_refresh_token_record(db, user_id, payload.refresh_token)

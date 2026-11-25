@@ -4,11 +4,12 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Set
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from redis.asyncio import Redis
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from auth import verify_token
 from models import CommitScore, engine
 
 
@@ -171,6 +172,19 @@ async def _remove_connection(org_id: str, websocket: WebSocket) -> None:
 
 @router.websocket("/ws/{org_id}")
 async def org_scores_websocket(websocket: WebSocket, org_id: str) -> None:
+    # Browsers can't set headers on WebSockets, so the access token comes as
+    # ?token=<access token>. Without this check anyone could stream any
+    # organisation's scores just by knowing its id.
+    token = websocket.query_params.get("token", "")
+    try:
+        claims = verify_token(token)
+    except HTTPException:
+        await websocket.close(code=1008)  # policy violation
+        return
+    if claims.get("org_id") != org_id or claims.get("role") not in {"manager", "ceo"}:
+        await websocket.close(code=1008)
+        return
+
     await websocket.accept()
 
     async with connection_lock:

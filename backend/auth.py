@@ -66,7 +66,7 @@ def verify_password(plain: str, hashed: str) -> bool:
             return False
 
 
-def _build_token_payload(data: Dict[str, Any], expires_delta: timedelta) -> Dict[str, Any]:
+def _build_token_payload(data: Dict[str, Any], expires_delta: timedelta, token_type: str) -> Dict[str, Any]:
     sub = data.get("sub")
     role = data.get("role")
     org_id = data.get("org_id")
@@ -83,20 +83,23 @@ def _build_token_payload(data: Dict[str, Any], expires_delta: timedelta) -> Dict
         "org_id": str(org_id),
         "display_name": str(display_name or ""),
         "exp": expire_at,
+        # "access" or "refresh". Without this, a 7-day refresh token could be
+        # used as an access token and still work after the user logged out.
+        "type": token_type,
     }
 
 
 def create_access_token(data: Dict[str, Any]) -> str:
-    payload = _build_token_payload(data, timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    payload = _build_token_payload(data, timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES), "access")
     return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
 def create_refresh_token(data: Dict[str, Any]) -> str:
-    payload = _build_token_payload(data, timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS))
+    payload = _build_token_payload(data, timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS), "refresh")
     return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
-def verify_token(token: str) -> Dict[str, Any]:
+def verify_token(token: str, expected_type: str = "access") -> Dict[str, Any]:
     credentials_error = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -108,8 +111,10 @@ def verify_token(token: str) -> Dict[str, Any]:
     except JWTError as exc:
         raise credentials_error from exc
 
-    required_claims = ("sub", "role", "org_id", "display_name", "exp")
+    required_claims = ("sub", "role", "org_id", "display_name", "exp", "type")
     if any(claim not in payload for claim in required_claims):
+        raise credentials_error
+    if payload["type"] != expected_type:
         raise credentials_error
 
     return payload

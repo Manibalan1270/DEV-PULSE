@@ -3,6 +3,9 @@
 import { useState } from 'react'
 import { Code2, Users, Building2, Eye, EyeOff, ArrowRight, Zap, AlertTriangle, TrendingUp, GitCommit, Shield, Activity } from 'lucide-react'
 
+// Set NEXT_PUBLIC_API_URL in .env.local when the backend isn't on localhost:8000
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+
 type Role = 'developer' | 'manager' | 'ceo'
 
 export default function LoginPage() {
@@ -17,7 +20,7 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch('http://localhost:8000/auth/login', {
+      const res = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
@@ -28,7 +31,7 @@ export default function LoginPage() {
       localStorage.setItem('role', data.role)
       localStorage.setItem('org_id', data.org_id)
       localStorage.setItem('display_name', data.display_name)
-      document.cookie = `token=${data.access_token}; path=/`
+      document.cookie = `token=${data.access_token}; path=/; SameSite=Lax${location.protocol === 'https:' ? '; Secure' : ''}`
       window.location.href = `/dashboard/${data.role}`
     } catch (e: any) {
       setError(e.message)
